@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleClear", "02_SimpleCle
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloTriangle", "03_HelloTriangle\HelloTriangle.csproj", "{0820F60B-9C82-462E-938A-58AFA902C1E3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldTriangle", "04_WorldTriangle\WorldTriangle.csproj", "{C3B90D99-2602-4993-A0F2-7D3C8117A292}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{0820F60B-9C82-462E-938A-58AFA902C1E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0820F60B-9C82-462E-938A-58AFA902C1E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0820F60B-9C82-462E-938A-58AFA902C1E3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
