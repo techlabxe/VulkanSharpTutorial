@@ -115,5 +115,148 @@ namespace VulkanSharpTutorial.Common
             }
             return stageCreateInfo;
         }
+
+        /// <summary>
+        /// ユニフォームバッファのディスクリプタの生成.
+        /// </summary>
+        /// <param name="destBinding"></param>
+        /// <param name="uniformBuffer"></param>
+        /// <param name="size"></param>
+        /// <param name="descriptorSet"></param>
+        /// <returns></returns>
+        public static VkWriteDescriptorSet CreateDescriptorFromUniformBuffer( uint destBinding, VkDescriptorBufferInfo descUniformBufferInfo, VkDescriptorSet descriptorSet )
+        {
+            var descriptorUniform = new VkWriteDescriptorSet()
+            {
+                descriptorCount=1,
+                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                pBufferInfo = new[] { descUniformBufferInfo, },
+                dstBinding = destBinding,
+                dstSet = descriptorSet
+            };
+            return descriptorUniform;
+        }
+
+        /// <summary>
+        /// テクスチャのためのディスクリプタの生成.
+        /// </summary>
+        /// <param name="destBinding"></param>
+        /// <param name="imageView"></param>
+        /// <param name="sampler"></param>
+        /// <param name="descriptorSet"></param>
+        /// <returns></returns>
+        public static VkWriteDescriptorSet CreateDescriptorFromImageSampler( uint destBinding, VkDescriptorImageInfo descImageSampler, VkDescriptorSet descriptorSet )
+        {
+            var descriptorImageSampler = new VkWriteDescriptorSet()
+            {
+                descriptorCount = 1,
+                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                pImageInfo = new[] { descImageSampler },
+                dstBinding = destBinding,
+                dstSet = descriptorSet,
+            };
+            return descriptorImageSampler;
+        }
+
+
+        public static void CreateTexture(VkDevice device, VkPhysicalDevice physicalDevice, int width, int height, byte[] imageSource, out VkImage image, out VkDeviceMemory memory, VkQueue queue, VkCommandBuffer workCommandBuffer )
+        {
+            var imageCreateInfo = new VkImageCreateInfo()
+            {
+                imageType = VkImageType.VK_IMAGE_TYPE_2D,
+                format = VkFormat.VK_FORMAT_B8G8R8A8_UNORM,
+                extent = new VkExtent3D(width, height),
+                mipLevels = 1,
+                usage = VkImageUsageFlags.VK_IMAGE_USAGE_TRANSFER_DST_BIT | VkImageUsageFlags.VK_IMAGE_USAGE_SAMPLED_BIT,
+            };
+            VulkanAPI.vkCreateImage(device, ref imageCreateInfo, out image);
+            VkMemoryRequirements requirements;
+            VulkanAPI.vkGetImageMemoryRequirements(device, image, out requirements);
+            VkMemoryPropertyFlags memoryFlags = VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            VulkanAPI.vkAllocateMemory(device, physicalDevice, ref requirements, memoryFlags, out memory);
+            VulkanAPI.vkBindImageMemory(device, image, memory, 0);
+
+            // ステージングバッファ経由で転送.
+            VkBuffer staging;
+            VkDeviceMemory stagingMemory;
+            var stagingFlags = VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            CreateBuffer(device, physicalDevice, imageSource.Length, VkBufferUsageFlags.VK_BUFFER_USAGE_TRANSFER_SRC_BIT, stagingFlags, out staging, out stagingMemory);
+            MappedMemoryStream mappedStream;
+            VulkanAPI.vkMapMemory(device, stagingMemory, 0, VkDeviceSize.VK_WHOLE_SIZE, 0, out mappedStream);
+            mappedStream.Write(imageSource);
+            VulkanAPI.vkUnmapMemory(device, stagingMemory);
+
+            var copyRegion = new VkBufferImageCopy()
+            {
+                imageExtent = new VkExtent3D(width, height),
+                bufferImageHeight = (uint)height,
+                imageSubresource = new VkImageSubresourceLayers()
+                {
+                    aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
+                    mipLevel = 0,
+                    baseArrayLayer = 0,
+                    layerCount = 1,
+                }
+            };
+
+            // 一時的なコマンドバッファで転送処理.
+            var command = workCommandBuffer;
+            VulkanAPI.vkBeginCommandBuffer(command);
+            setImageMemoryBarrier(command,
+                    0, VkAccessFlags.VK_ACCESS_TRANSFER_WRITE_BIT,
+                    VkImageLayout.VK_IMAGE_LAYOUT_UNDEFINED, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    image, VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT);
+            VulkanAPI.vkCmdCopyBufferToImage(command, staging, image, VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, new[] { copyRegion });
+            setImageMemoryBarrier(command,
+                    VkAccessFlags.VK_ACCESS_TRANSFER_WRITE_BIT, VkAccessFlags.VK_ACCESS_SHADER_READ_BIT,
+                    VkImageLayout.VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VkImageLayout.VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    image, VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT);
+            VulkanAPI.vkEndCommandBuffer(command);
+
+            var submitInfo = new VkSubmitInfo()
+            {
+                commandBuffers = new[] { command },
+            };
+            var fenceCreateInfo = new VkFenceCreateInfo() { };
+            VkFence fence;
+            VulkanAPI.vkCreateFence(device, fenceCreateInfo, out fence);
+            VulkanAPI.vkQueueSubmit(queue, new[] { submitInfo }, fence);
+
+            VulkanAPI.vkWaitForFences(device, new[] { fence }, true, ulong.MaxValue);
+            VulkanAPI.vkDestroyFence(device, fence);
+            VulkanAPI.vkDestroyBuffer(device, staging);
+            VulkanAPI.vkFreeMemory(device, stagingMemory);
+        }
+    }
+
+    /// <summary>
+    /// 32bit カラー TGA ファイルを読み取るだけの簡単クラス.
+    /// </summary>
+    public class SimpleTgaReader
+    {
+        public SimpleTgaReader(string file)
+        {
+            using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read))
+            {
+                var data = new byte[fs.Length];
+                fs.Read(data, 0, (int)fs.Length);
+
+                var reader = new BinaryReader(new MemoryStream(data));
+
+                reader.BaseStream.Seek(12, SeekOrigin.Current);
+
+                Width = reader.ReadInt16();
+                Height = reader.ReadInt16();
+
+                reader.BaseStream.Seek(2, SeekOrigin.Current);
+
+                var imageBytes = Width * Height * 4;
+                ImageData = reader.ReadBytes(imageBytes);
+            }
+        }
+
+        public byte[] ImageData { get; private set; }
+        public int Width { get; private set; }
+        public int Height { get; private set; }
     }
 }

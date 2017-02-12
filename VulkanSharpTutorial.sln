@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloTriangle", "03_HelloTr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldTriangle", "04_WorldTriangle\WorldTriangle.csproj", "{C3B90D99-2602-4993-A0F2-7D3C8117A292}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloTexture", "05_HelloTexture\HelloTexture.csproj", "{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{C3B90D99-2602-4993-A0F2-7D3C8117A292}.Release|Any CPU.Build.0 = Release|Any CPU
+		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
