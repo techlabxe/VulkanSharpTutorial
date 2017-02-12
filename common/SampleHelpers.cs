@@ -5,6 +5,8 @@ using System.Text;
 using System.Threading.Tasks;
 using SharpVulkan;
 using System.IO;
+using System.Runtime.InteropServices;
+using GlmSharp;
 
 namespace VulkanSharpTutorial.Common
 {
@@ -227,6 +229,8 @@ namespace VulkanSharpTutorial.Common
             VulkanAPI.vkDestroyBuffer(device, staging);
             VulkanAPI.vkFreeMemory(device, stagingMemory);
         }
+
+
     }
 
     /// <summary>
@@ -258,5 +262,55 @@ namespace VulkanSharpTutorial.Common
         public byte[] ImageData { get; private set; }
         public int Width { get; private set; }
         public int Height { get; private set; }
+    }
+
+    public class CubeModel
+    {
+        [StructLayout(LayoutKind.Sequential)]
+        public struct Vertex
+        {
+            public vec3 Position;
+            public vec4 Color;
+        }
+
+        public static Vertex[] GetVertices()
+        {
+            var vertices = new Vertex[]
+            {
+                new Vertex{ Position = new vec3(-1.0f, -1.0f, -1.0f), Color = new vec4(0.0f, 0.0f, 0.0f, 1.0f) },
+                new Vertex{ Position = new vec3(-1.0f, -1.0f,  1.0f), Color = new vec4(0.0f, 0.0f, 1.0f, 1.0f) },
+                new Vertex{ Position = new vec3(-1.0f,  1.0f, -1.0f), Color = new vec4(0.0f, 1.0f, 0.0f, 1.0f) },
+                new Vertex{ Position = new vec3(-1.0f,  1.0f,  1.0f), Color = new vec4(0.0f, 1.0f, 1.0f, 1.0f) },
+                new Vertex{ Position = new vec3( 1.0f, -1.0f, -1.0f), Color = new vec4(1.0f, 0.0f, 0.0f, 1.0f) },
+                new Vertex{ Position = new vec3( 1.0f, -1.0f,  1.0f), Color = new vec4(1.0f, 0.0f, 1.0f, 1.0f) },
+                new Vertex{ Position = new vec3( 1.0f,  1.0f, -1.0f), Color = new vec4(1.0f, 1.0f, 0.0f, 1.0f) },
+                new Vertex{ Position = new vec3( 1.0f,  1.0f,  1.0f), Color = new vec4(1.0f, 1.0f, 1.0f, 1.0f) },
+            };
+            return vertices;
+        }
+        public static ushort[] GetIndices()
+        {
+            var indices = new ushort[]
+            {
+              0,2,1, // -x
+              1,2,3,
+
+              4,5,6, // +x
+              5,7,6,
+
+              0,1,5, // -y
+              0,5,4,
+
+              2,6,7, // +y
+              2,7,3,
+
+              0,4,6, // -z
+              0,6,2,
+
+              1,3,7, // +z
+              1,7,5,
+            };
+            return indices;
+        }
     }
 }

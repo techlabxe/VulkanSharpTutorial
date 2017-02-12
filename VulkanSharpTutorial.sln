@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WorldTriangle", "04_WorldTr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HelloTexture", "05_HelloTexture\HelloTexture.csproj", "{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cube", "06_Cube\Cube.csproj", "{D73020CA-E4B3-45A1-B82B-068310592B16}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{78C633CE-35F2-4EF7-8B37-2A4F6C9175F3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D73020CA-E4B3-45A1-B82B-068310592B16}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D73020CA-E4B3-45A1-B82B-068310592B16}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D73020CA-E4B3-45A1-B82B-068310592B16}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D73020CA-E4B3-45A1-B82B-068310592B16}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

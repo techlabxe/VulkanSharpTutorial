@@ -17,13 +17,13 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using VulkanSharpTutorial.Common;
 
-namespace HelloTexture
+namespace Cube
 {
     [StructLayout(LayoutKind.Sequential)]
     struct Vertex
     {
         public vec3 Position;
-        public vec2 UV0;
+        public vec4 Color;
     }
     [StructLayout(LayoutKind.Sequential)]
     struct Transform
@@ -69,14 +69,11 @@ namespace HelloTexture
             };
             VulkanAPI.vkAllocateCommandBuffers(device, ref allocateInfo, out m_commandBuffers);
 
-            // 頂点バッファの作成.
-            CreateVertexBuffer(device, args.PhysicalDevice);
+            // 頂点/インデックスバッファの作成.
+            CreateCubeModel(device, args.PhysicalDevice);
 
             // 定数バッファの準備.
             CreateUniformBuffer(device, args.PhysicalDevice);
-
-            // テクスチャの準備.
-            CreateTexture(device, args.PhysicalDevice, args.GraphicsQueue );
 
             // ディスクリプタの準備.
             PrepareDescriptor(device);
@@ -86,7 +83,7 @@ namespace HelloTexture
             // プリミティブの情報.
             m_inputAssemblyState = new VkPipelineInputAssemblyStateCreateInfo()
             {
-                topology = VkPrimitiveTopology.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+                topology = VkPrimitiveTopology.VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST
             };
             // シェーダーステージ情報の構築.
             m_shaderStages = new VkPipelineShaderStageCreateInfo[2]
@@ -98,6 +95,10 @@ namespace HelloTexture
             m_rasterizationState = new VkPipelineRasterizationStateCreateInfo();
             // デプスステンシルステートの構築.
             m_depthStencilState = new VkPipelineDepthStencilStateCreateInfo();
+            m_depthStencilState.depthTestEnable = true;
+            m_depthStencilState.depthWriteEnable = true;
+            m_depthStencilState.depthCompareOp = VkCompareOp.VK_COMPARE_OP_LESS_OR_EQUAL;
+
             // カラーブレンドステートの構築.
             m_colorBlendState = new VkPipelineColorBlendStateCreateInfo();
             var colorBlendAttachment = new VkPipelineColorBlendAttachmentState();
@@ -107,7 +108,7 @@ namespace HelloTexture
             m_multisampleState = new VkPipelineMultisampleStateCreateInfo();
 
             // パイプラインレイアウトの構築.
-            m_pipelineLayout = CreatePipelineLayout(device);
+            m_pipelineLayout = m_resourceManager.CreatePipelineLayout(device, m_descriptorSetLayout);
 
             // ビューポートステートの構築.
             m_viewportState = CreateViewportState();
@@ -131,14 +132,18 @@ namespace HelloTexture
             clearColor.valF32.G = 0.25f;
             clearColor.valF32.B = 0.4f;
             clearColor.valF32.A = 1.0f;
+            VkClearDepthStencilValue clearDepth = new VkClearDepthStencilValue() {
+                depth = 1.0f,
+                stencil = 0,
+            };
 
             var currentExtent = vkctrl.GetCurrentExtent();
             // 定数バッファの更新.
             var sceneTrs = new Transform();
             var aspect = (float)currentExtent.width / (float)currentExtent.height;
             var proj = mat4.Perspective((float)Math.PI / 3.0f, aspect, 1.0f, 100.0f);
-            sceneTrs.World = mat4.RotateY(m_frameCount * 0.1f);
-            sceneTrs.View = mat4.LookAt(new vec3(0, 0, 3), new vec3(0, 0, 0), new vec3(0, 1, 0));
+            sceneTrs.World = mat4.RotateY(m_frameCount * 0.05f) * mat4.RotateX( m_frameCount * 0.01f );
+            sceneTrs.View = mat4.LookAt(new vec3(0, 0, 6), new vec3(0, 0, 0), new vec3(0, 1, 0));
             sceneTrs.Proj = proj;
             MappedMemoryStream mapped = null;
             VulkanAPI.vkMapMemory(device, m_uniformBufferMemory, 0, VkDeviceSize.VK_WHOLE_SIZE, 0, out mapped);
@@ -156,14 +161,18 @@ namespace HelloTexture
                 framebuffer = framebuffer,
                 renderArea = renderArea,
                 renderPass = vkctrl.GetControlRenderPass(),
-                pClearValues = new[] { new VkClearValue() { color = clearColor } }
+                pClearValues = new[] {
+                    new VkClearValue() { color = clearColor },
+                    new VkClearValue() { depthStencil = clearDepth },
+                }
             };
 
             VulkanAPI.vkCmdBeginRenderPass(command, ref renderPassBeginInfo, VkSubpassContents.VK_SUBPASS_CONTENTS_INLINE);
             VulkanAPI.vkCmdBindPipeline(command, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
             VulkanAPI.vkCmdBindVertexBuffers(command, 0, 1, new[] { m_vertexBuffer }, new[] { (VkDeviceSize)0 });
+            VulkanAPI.vkCmdBindIndexBuffer(command, m_indexBuffer, 0, VkIndexType.VK_INDEX_TYPE_UINT16);
             VulkanAPI.vkCmdBindDescriptorSets(command, VkPipelineBindPoint.VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipelineLayout, 0, new[] { m_descriptorSet }, null);
-            VulkanAPI.vkCmdDraw(command, 4, 1, 0, 0);
+            VulkanAPI.vkCmdDrawIndexed(command, 36, 1, 0, 0, 0);
 
             VulkanAPI.vkCmdEndRenderPass(command);
             VulkanAPI.vkEndCommandBuffer(command);
@@ -172,7 +181,7 @@ namespace HelloTexture
             {
                 commandBuffers = new[] { command }
             };
-            VulkanAPI.vkQueueSubmit(args.GraphicsQueue, new VkSubmitInfo[] { submitInfo }, null);
+            VulkanAPI.vkQueueSubmit(args.GraphicsQueue, submitInfo, null);
 
             vkctrl.SwapBuffers();
             m_frameCount++;
@@ -182,25 +191,11 @@ namespace HelloTexture
             // 本クラスで作ったVulkanの各リソースを破棄する.
             var dev = args.Device;
 
-            VulkanAPI.vkDestroyImage(dev, m_image); m_image = null;
-            VulkanAPI.vkDestroyImageView(dev, m_imageView); m_imageView = null;
-            VulkanAPI.vkFreeMemory(dev, m_imageMemory); m_imageMemory = null;
-            VulkanAPI.vkDestroySampler(dev, m_imageSampler); m_imageSampler = null;
-
             VulkanAPI.vkDestroyPipeline(dev, m_graphicsPipeline); m_graphicsPipeline = null;
-            VulkanAPI.vkDestroyPipelineLayout(dev, m_pipelineLayout); m_pipelineLayout = null;
 
             m_shaderStages.Select(x => x.module).ToList().ForEach(x => VulkanAPI.vkDestroyShaderModule(dev, x));
 
-            VulkanAPI.vkDestroyBuffer(dev, m_vertexBuffer); m_vertexBuffer = null;
-            VulkanAPI.vkFreeMemory(dev, m_vertexBufferMemory); m_vertexBufferMemory = null;
-
-            VulkanAPI.vkDestroyBuffer(dev, m_uniformBuffer); m_uniformBuffer = null;
-            VulkanAPI.vkFreeMemory(dev, m_uniformBufferMemory); m_uniformBufferMemory = null;
-
-            VulkanAPI.vkFreeDescriptorSets(dev, m_descriptorPool, new[] { m_descriptorSet });
-            VulkanAPI.vkDestroyDescriptorSetLayout(dev, m_descriptorSetLayout); m_descriptorSetLayout = null;
-            VulkanAPI.vkDestroyDescriptorPool(dev, m_descriptorPool); m_descriptorPool = null;
+            m_resourceManager.Destroy(dev);
 
             VulkanAPI.vkFreeCommandBuffers(dev, m_commandPool, m_commandBuffers);
             VulkanAPI.vkDestroyCommandPool(dev, m_commandPool);
@@ -240,12 +235,12 @@ namespace HelloTexture
                 offset = 0,
                 format = VkFormat.VK_FORMAT_R32G32B32_SFLOAT,
             };
-            var attribUV0 = new VkVertexInputAttributeDescription()
+            var attribCol0 = new VkVertexInputAttributeDescription()
             {
                 location = 1,
                 binding = 0,
                 offset = 12,
-                format = VkFormat.VK_FORMAT_R32G32_SFLOAT,
+                format = VkFormat.VK_FORMAT_R32G32B32A32_SFLOAT,
             };
             var vertexInputBindingDesc = new VkVertexInputBindingDescription()
             {
@@ -255,7 +250,7 @@ namespace HelloTexture
             };
             var vertexInputState = new VkPipelineVertexInputStateCreateInfo()
             {
-                attributeDescriptions = new[] { attribPosition, attribUV0 },
+                attributeDescriptions = new[] { attribPosition, attribCol0 },
                 bindingDescriptions = new[] { vertexInputBindingDesc },
             };
             return vertexInputState;
@@ -263,45 +258,23 @@ namespace HelloTexture
 
         private void PrepareDescriptor(VkDevice device)
         {
-            // 今は定数バッファを１つ、サンプラーを１つを格納できるだけのディスクリプタプールを準備.
-            VkDescriptorPoolSize descriptorPoolSize = new VkDescriptorPoolSize()
+            // 今は定数バッファを１つを格納できるだけのディスクリプタプールを準備.
+            var descriptorPoolSize = new VkDescriptorPoolSize()
             {
                 descriptorCount = 1,
                 type = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             };
-            VkDescriptorPoolSize descriptorPoolSizeForSampler = new VkDescriptorPoolSize()
-            {
-                descriptorCount = 1,
-                type = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            };
-            var descriptorPoolCreateInfo = new VkDescriptorPoolCreateInfo()
-            {
-                poolSizes = new[] { descriptorPoolSize, descriptorPoolSizeForSampler },
-                maxSets = 1,
-                flags = VkDescriptorPoolCreateFlags.VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-            };
-            VulkanAPI.vkCreateDescriptorPool(device, ref descriptorPoolCreateInfo, out m_descriptorPool);
+            m_descriptorPool = m_resourceManager.CreateDescriptorPool( device, new[] { descriptorPoolSize }, 1 );
 
             // ディスクリプタセットレイアウトの作成.
             //  - 定数バッファを１つ
-            //  - テクスチャサンプラ１つ
-            var descLayoutBindingForUniform = new VkDescriptorSetLayoutBinding();
-            descLayoutBindingForUniform.binding = 0;
-            descLayoutBindingForUniform.descriptorCount = 1;
-            descLayoutBindingForUniform.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descLayoutBindingForUniform.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_VERTEX_BIT;
-            var descLayoutBindingForSampler = new VkDescriptorSetLayoutBinding();
-            descLayoutBindingForSampler.binding = 1;
-            descLayoutBindingForSampler.descriptorCount = 1;
-            descLayoutBindingForSampler.descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descLayoutBindingForSampler.stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_FRAGMENT_BIT;
-            var descriptorSetLayoutCreateInfo = new VkDescriptorSetLayoutCreateInfo();
-            descriptorSetLayoutCreateInfo.bindings = new[] {
-                descLayoutBindingForUniform,
-                descLayoutBindingForSampler
+            var descLayoutBinding = new VkDescriptorSetLayoutBinding() {
+                binding = 0,
+                descriptorCount = 1,
+                descriptorType = VkDescriptorType.VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                stageFlags = VkShaderStageFlagBits.VK_SHADER_STAGE_VERTEX_BIT
             };
-            VulkanAPI.vkCreateDescriptorSetLayout(device, ref descriptorSetLayoutCreateInfo, out m_descriptorSetLayout);
-
+            m_descriptorSetLayout = m_resourceManager.CreateDescriptorSetLayout(device, new[] { descLayoutBinding });
 
             // ディスクリプタを作成＆更新.
             VkDescriptorSet[] descriptorSets;
@@ -314,28 +287,9 @@ namespace HelloTexture
                 buffer = m_uniformBuffer,
                 range = Marshal.SizeOf<Transform>(),
             };
-            var descSampler = new VkDescriptorImageInfo()
-            {
-                imageView = m_imageView,
-                sampler = m_imageSampler,
-            };
             var descForUniform = SampleHelpers.CreateDescriptorFromUniformBuffer(0, descUniform, m_descriptorSet);
-            var descForSampler = SampleHelpers.CreateDescriptorFromImageSampler(1, descSampler, m_descriptorSet);
-            var descriptorWrites = new[] { descForUniform, descForSampler };
+            var descriptorWrites = new[] { descForUniform };
             VulkanAPI.vkUpdateDescriptorSets(device, descriptorWrites, null);
-        }
-
-        /// <summary>
-        /// パイプラインレイアウトを構築します。
-        /// </summary>
-        /// <returns></returns>
-        private VkPipelineLayout CreatePipelineLayout(VkDevice device)
-        {
-            var createInfo = new VkPipelineLayoutCreateInfo();
-            createInfo.setLayouts = new[] { m_descriptorSetLayout };
-            VkPipelineLayout layout = null;
-            VulkanAPI.vkCreatePipelineLayout(device, ref createInfo, out layout);
-            return layout;
         }
 
         private VkPipelineViewportStateCreateInfo CreateViewportState()
@@ -380,70 +334,39 @@ namespace HelloTexture
             return pipeline;
         }
 
-        private void CreateVertexBuffer(VkDevice device, VkPhysicalDevice physicalDevice)
+        public void CreateCubeModel(VkDevice device, VkPhysicalDevice physicalDevice)
         {
-            // 初期頂点データ.
-            var vertices = new Vertex[] {
-                new Vertex() { Position = new vec3(-.5f,0.5f,0.0f), UV0 = new vec2(0.0f, 0.0f) },
-                new Vertex() { Position = new vec3(+.5f,0.5f,0.0f), UV0 = new vec2(1.0f, 0.0f) },
-                new Vertex() { Position = new vec3(-.5f,-.5f,0.0f), UV0 = new vec2(0.0f, 1.0f) },
-                new Vertex() { Position = new vec3(+.5f,-.5f,0.0f), UV0 = new vec2(1.0f, 1.0f) },
-            };
-            var bufferSize = Marshal.SizeOf<Vertex>() * vertices.Length;
-            VkMemoryPropertyFlags memoryFlags = VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-            SampleHelpers.CreateBuffer(device, physicalDevice, bufferSize, VkBufferUsageFlags.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, memoryFlags, out m_vertexBuffer, out m_vertexBufferMemory);
+            var cubeVertices = CubeModel.GetVertices();
+            var cubeIndices = CubeModel.GetIndices();
+            var vbSize = Marshal.SizeOf<CubeModel.Vertex>() * cubeVertices.Length;
+            var ibSize = Marshal.SizeOf<ushort>() * cubeIndices.Length;
 
-            // 初期頂点データの書き込み.
-            MappedMemoryStream mappedStream;
-            VulkanAPI.vkMapMemory(device, m_vertexBufferMemory, 0, VkDeviceSize.VK_WHOLE_SIZE, 0, out mappedStream);
-            mappedStream.Write(vertices);
+            VkMemoryPropertyFlags flags = VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            SampleHelpers.CreateBuffer(device, physicalDevice, vbSize, VkBufferUsageFlags.VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, flags, out m_vertexBuffer, out m_vertexBufferMemory);
+            SampleHelpers.CreateBuffer(device, physicalDevice, ibSize, VkBufferUsageFlags.VK_BUFFER_USAGE_INDEX_BUFFER_BIT, flags, out m_indexBuffer, out m_indexBufferMemory);
+
+            // 初期データの書き込み.
+            MappedMemoryStream mapped;
+            VulkanAPI.vkMapMemory(device, m_vertexBufferMemory, 0, VkDeviceSize.VK_WHOLE_SIZE, 0, out mapped);
+            mapped.Write(cubeVertices);
             VulkanAPI.vkUnmapMemory(device, m_vertexBufferMemory);
+            VulkanAPI.vkMapMemory(device, m_indexBufferMemory, 0, VkDeviceSize.VK_WHOLE_SIZE, 0, out mapped);
+            mapped.Write(cubeIndices);
+            VulkanAPI.vkUnmapMemory(device, m_indexBufferMemory);
+
+            m_resourceManager.Regist(m_vertexBuffer, m_vertexBufferMemory);
+            m_resourceManager.Regist(m_indexBuffer, m_indexBufferMemory);
         }
+
 
         private void CreateUniformBuffer(VkDevice device, VkPhysicalDevice physicalDevice)
         {
             var bufferSize = Marshal.SizeOf<Transform>();
             VkMemoryPropertyFlags memoryFlags = VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VkMemoryPropertyFlags.VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
             SampleHelpers.CreateBuffer(device, physicalDevice, bufferSize, VkBufferUsageFlags.VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, memoryFlags, out m_uniformBuffer, out m_uniformBufferMemory);
+
+            m_resourceManager.Regist(m_uniformBuffer, m_uniformBufferMemory);
         }
-        private void CreateTexture( VkDevice device, VkPhysicalDevice physicalDevice, VkQueue graphicsQueue )
-        {
-            SimpleTgaReader tex = new SimpleTgaReader("resource/texture.tga");
-            var command =m_commandBuffers[1];
-            SampleHelpers.CreateTexture(device, physicalDevice, 
-                tex.Width, tex.Height, tex.ImageData, 
-                out m_image, out m_imageMemory, graphicsQueue, command);
-
-            // イメージビューの作成.
-            var imageViewCreateInfo = new VkImageViewCreateInfo()
-            {
-                image = m_image,
-                viewType = VkImageViewType.VK_IMAGE_VIEW_TYPE_2D,
-                format = VkFormat.VK_FORMAT_B8G8R8A8_UNORM,
-                components =new VkComponentMapping(),
-                subresourceRange = new VkImageSubresourceRange()
-                {
-                    aspectMask = VkImageAspectFlags.VK_IMAGE_ASPECT_COLOR_BIT,
-                    baseArrayLayer = 0,
-                    baseMipLevel = 0,
-                    levelCount = 1,
-                    layerCount =1,
-                }
-            };
-            VulkanAPI.vkCreateImageView(device, ref imageViewCreateInfo, out m_imageView );
-
-            // サンプラーの作成.
-            var samplerCreateInfo = new VkSamplerCreateInfo()
-            {
-                magFilter = VkFilter.VK_FILTER_LINEAR,
-                minFilter = VkFilter.VK_FILTER_LINEAR,
-                mipmapMode = VkSamplerMipmapMode.VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                addressModeU = VkSamplerAddressMode.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-                addressModeV = VkSamplerAddressMode.VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-            };
-            VulkanAPI.vkCreateSampler(device, ref samplerCreateInfo, out m_imageSampler);
-        }
-
         private VkCommandPool m_commandPool;
         private VkCommandBuffer[] m_commandBuffers;
         private uint m_frameCount;
@@ -469,14 +392,14 @@ namespace HelloTexture
         private VkBuffer m_vertexBuffer;
         private VkDeviceMemory m_vertexBufferMemory;
 
+        // インデックスバッファ関連.
+        private VkBuffer m_indexBuffer;
+        private VkDeviceMemory m_indexBufferMemory;
+
         // 定数バッファ関連.
         private VkBuffer m_uniformBuffer;
         private VkDeviceMemory m_uniformBufferMemory;
 
-        // テクスチャ関連.
-        private VkImage m_image;
-        private VkDeviceMemory m_imageMemory;
-        private VkImageView m_imageView;
-        private VkSampler m_imageSampler;
+        private SimpleResourceManager m_resourceManager = new SimpleResourceManager();
     }
 }
